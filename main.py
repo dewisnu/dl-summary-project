@@ -12,12 +12,17 @@ app = FastAPI()
 
 nltk.download('punkt_tab')
 
-# Initialize the T5 summarization pipeline
-# Initialize the pipeline with `from_tf=True` to use TensorFlow weights
-pipe = pipeline(
+# Initialize the text generation pipelines for T5 and Pegasus
+pipe_t5 = pipeline(
     "text2text-generation",
-    model="arthd24/ext_abs_t5small",
-    framework="tf"  # If you're using TensorFlow
+    model="arthd24/ext_abs_t5small",  # T5 model
+    framework="tf"  # TensorFlow
+)
+
+pipe_pegasus = pipeline(
+    "text2text-generation",
+    model="arthd24/ext_abs_distill_pegasus",  # Pegasus model
+    framework="tf"  # TensorFlow
 )
 
 # Initialize the SentenceTransformer model
@@ -81,113 +86,67 @@ def stationary_distribution(transition_matrix):
 
 
 def extractive_summary(text, model_extra, top_n=25):
-    # Split text into sentences
     sentences = nltk.sent_tokenize(text)
 
     if len(sentences) < 2:
-        return text  # Return original text if not enough sentences for ranking
+        return text
 
-    # Generate sentence embeddings
     embeddings = model_extra.encode(sentences, show_progress_bar=False)
-    print(f"Embeddings shape: {embeddings.shape}")  # Debugging statement
 
-    # Compute similarity matrix
     similarity_matrix = np.dot(embeddings, embeddings.T)
-    print(f"Similarity matrix shape: {similarity_matrix.shape}")  # Debugging statement
 
-    # Calculate centrality scores
     centrality_scores = degree_centrality_scores(similarity_matrix)
-    print(f"Centrality scores: {centrality_scores}")  # Debugging statement
 
-    # Get the most central sentences
     ranked_indices = np.argsort(-centrality_scores)[:top_n]
     top_sentences = [sentences[i] for i in ranked_indices]
 
-    # Return the summary
     return ". ".join(top_sentences)
 
 
 # Add preprocessing function for text cleaning
 def preprocess_text(text):
-    """
-    Perform basic text preprocessing:
-    - Remove multiple spaces
-    - Remove URLs
-    - Convert to lowercase (optional)
-    - Keep punctuation
-    - Remove extra dots (..)
-    - Remove sentences containing 'figure' or 'table'
-    - Remove citations like (Author, Year) or n.d.
-    """
-    # Remove URLs (links)
     text = re.sub(r'http[s]?://\S+|www\.\S+', '', text)
-
-    # Remove multiple spaces
     text = re.sub(r'\s+', ' ', text)
-
-    # Optionally, convert to lowercase (if needed)
     text = text.lower()
-
-    # Remove extra dots (.. becomes .)
     text = re.sub(r'\.\.+', '.', text)
-
-    # Remove sentences containing the words 'figure' or 'table' (case-insensitive)
     text = re.sub(r'([^.]*\b(figure|table)\b[^.]*\.)', '', text, flags=re.IGNORECASE)
-
-    # Remove citations (e.g., (Author, Year) or n.d.)
-    text = re.sub(r'\([^\)]+\d{4}[^\)]+\)', '', text)  # Removes (Author, Year) type citations
-    text = re.sub(r'\bn\.d\.\b', '', text)  # Removes 'n.d.' citations
-
-    # Remove cite format [number]
+    text = re.sub(r'\([^\)]+\d{4}[^\)]+\)', '', text)
+    text = re.sub(r'\bn\.d\.\b', '', text)
     text = re.sub(r'\[\s*\d+\s*\]', '', text)
-
-    # Strip any leading/trailing spaces
-    text = text.strip()
-
-    return text
+    return text.strip()
 
 
-@app.post("/extractive-summary/", tags=["Summarization T5 Small"])
-async def process_pdf(file: UploadFile = File(...)):
+# Common logic for PDF processing
+async def process_file(file: UploadFile, pipe_model):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
     try:
-        # Read the uploaded PDF file
         pdf_content = await file.read()
 
-        # Save the file temporarily for PyPDF2 to read
         temp_file_path = "temp_uploaded.pdf"
         with open(temp_file_path, "wb") as temp_file:
             temp_file.write(pdf_content)
 
-        # Read the text from the PDF
         reader = PdfReader(temp_file_path)
         text = "".join([page.extract_text() for page in reader.pages])
 
-        # Extract sections
         sections = extract_sections(text)
 
-        # Preprocess each section's text
         for section in sections:
             sections[section] = preprocess_text(sections[section])
 
-        # Combine sections except References
         combined_text = " ".join(
             [content for section, content in sections.items() if section.lower() != "references"]
         )
 
-        # Preprocess combined text before summarization
         combined_text = preprocess_text(combined_text)
 
-        # Generate extractive summary
         ext_summary = preprocess_text(extractive_summary(combined_text, model_sformer, top_n=10))
 
-        # Use extractive summary as input to the abstractive model
         try:
-            # Use the extractive summary as input to the abstractive model
-            generated_text = pipe(
-                ext_summary,  # Use the extractive summary here
+            generated_text = pipe_model(
+                ext_summary,
                 max_length=200,
                 num_beams=4,
                 length_penalty=1.0
@@ -201,14 +160,20 @@ async def process_pdf(file: UploadFile = File(...)):
             "generated_text": generated_text
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
-
     finally:
-        # Clean up the temporary file
         import os
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
+
+
+@app.post("/summarization-t5/", tags=["Summarization T5"])
+async def summarization_t5(file: UploadFile = File(...)):
+    return await process_file(file, pipe_t5)
+
+
+@app.post("/summarization-pegasus/", tags=["Summarization Pegasus"])
+async def summarization_pegasus(file: UploadFile = File(...)):
+    return await process_file(file, pipe_pegasus)
 
 
 def custom_openapi():
