@@ -1,0 +1,34 @@
+# Ignore Git files
+.git
+.gitignore
+
+# Ignore Node modules (if you have a Node.js app or dependencies)
+node_modules/
+
+# Ignore temporary files created by the IDE
+.idea/
+.vscode/
+
+# Ignore Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Ignore logs
+*.log
+
+# Ignore all data folders or large files not needed in the image
+data/
+*.csv
+*.zip
+
+# Ignore environment files
+.env
+
+# Ignore Docker files for Compose (if they aren't needed)
+docker-compose.yml
+docker-compose.override.yml
+
+# Ignore build-related files or documentation
+Dockerfile.*
+README.md
