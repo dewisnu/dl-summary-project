@@ -147,9 +147,11 @@ async def process_file(file: UploadFile, pipe_model):
         try:
             generated_text = pipe_model(
                 ext_summary,
-                max_length=200,
+                min_length=200,
+                max_length=250,
                 num_beams=4,
-                length_penalty=1.0
+                repetition_penalty=2.0,
+                no_repeat_ngram_size=3,
             )[0].get('generated_text', 'No summary generated.')
         except Exception as e:
             generated_text = f"Error generating summary: {str(e)}"
