@@ -12,16 +12,9 @@ app = FastAPI()
 
 nltk.download('punkt_tab')
 
-# Initialize the text generation pipelines for T5 and Pegasus
-pipe_t5 = pipeline(
-    "text2text-generation",
-    model="arthd24/ext_abs_t5small",  # T5 model
-    framework="tf"  # TensorFlow
-)
-
 pipe_pegasus = pipeline(
     "text2text-generation",
-    model="arthd24/ext_abs_distill_pegasus",  # Pegasus model
+    model="arthd24/ext_abs_pegasus_all",  # Pegasus model
     framework="tf"  # TensorFlow
 )
 
@@ -85,7 +78,7 @@ def stationary_distribution(transition_matrix):
     return eigenvector
 
 
-def extractive_summary(text, model_extra, top_n=25):
+def extractive_summary(text, model_extra, top_n=20):
     sentences = nltk.sent_tokenize(text)
 
     if len(sentences) < 2:
@@ -166,11 +159,6 @@ async def process_file(file: UploadFile, pipe_model):
         import os
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-
-
-@app.post("/summarization-t5/", tags=["Summarization T5"])
-async def summarization_t5(file: UploadFile = File(...)):
-    return await process_file(file, pipe_t5)
 
 
 @app.post("/summarization-pegasus/", tags=["Summarization Pegasus"])
