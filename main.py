@@ -102,6 +102,7 @@ def preprocess_text(text):
     text = re.sub(r'\s+', ' ', text)
     text = text.lower()
     text = re.sub(r'\.\.+', '.', text)
+    text = re.sub(r'\[.*?\]|\(.*?\)', '', text)
     text = re.sub(r'([^.]*\b(figure|table)\b[^.]*\.)', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\([^\)]+\d{4}[^\)]+\)', '', text)
     text = re.sub(r'\bn\.d\.\b', '', text)
