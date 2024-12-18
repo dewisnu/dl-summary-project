@@ -151,7 +151,6 @@ async def process_file(file: UploadFile, pipe_model):
             generated_text = f"Error generating summary: {str(e)}"
 
         return {
-            "sections": sections,
             "extractive_summary": ext_summary,
             "generated_text": generated_text
         }
